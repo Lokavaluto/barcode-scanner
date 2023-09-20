@@ -193,20 +193,15 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
   }
 
   private async _startVideo(): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-      await navigator.mediaDevices
-        .getUserMedia({
-          audio: false,
-          video: true,
-        })
-        .then((stream: MediaStream) => {
-          // Stop any existing stream so we can request media with different constraints based on user input
-          stream.getTracks().forEach((track) => track.stop());
-        })
-        .catch((error) => {
-          reject(error);
-        });
+    const stream = await navigator.mediaDevices
+      .getUserMedia({
+        audio: false,
+        video: true,
+      })
+    // Stop any existing stream so we can request media with different constraints based on user input
+    stream.getTracks().forEach((track) => track.stop());
 
+    return new Promise(async (resolve, reject) => {
       const body = document.body;
       const video = document.getElementById('video');
 
