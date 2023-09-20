@@ -185,7 +185,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     });
   }
 
-  private async _startVideo(): Promise<{}> {
+  private async _startVideo(): Promise<void> {
     return new Promise(async (resolve, reject) => {
       await navigator.mediaDevices
         .getUserMedia({
@@ -248,7 +248,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
                 this._video.srcObject = stream;
                 this._video.play();
               }
-              resolve({});
+              resolve();
             },
             (err) => {
               reject(err);
