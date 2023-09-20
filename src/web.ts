@@ -165,14 +165,14 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
   private async _getFirstResultFromReader() {
     const videoElement = await this._getVideoElement();
     if (!videoElement) return
+    let hints;
+    if (this._formats.length) {
+      hints = new Map();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, this._formats);
+    }
+    const reader = new BrowserQRCodeReader(hints);
 
     return new Promise<IScanResultWithContent>(async (resolve, reject) => {
-      let hints;
-      if (this._formats.length) {
-        hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, this._formats);
-      }
-      const reader = new BrowserQRCodeReader(hints);
       this._controls = await reader.decodeFromVideoElement(videoElement, (result, error, controls) => {
         if (!error && result && result.getText()) {
           resolve({
