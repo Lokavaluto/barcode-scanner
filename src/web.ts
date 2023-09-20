@@ -202,11 +202,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     // Stop any existing stream so we can request media with different constraints based on user input
     stream.getTracks().forEach((track) => track.stop());
 
-    const body = document.body;
-    const video = document.getElementById('video');
-
-    if (video)
-      throw new Error("Camera already started")
+    if (document.getElementById('video')) throw new Error('Camera already started');
 
     const parent = document.createElement('div');
     parent.setAttribute(
@@ -238,8 +234,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     }
 
     parent.appendChild(this._video);
-    body.appendChild(parent);
-
+    document.body.appendChild(parent);
 
     const constraints: MediaStreamConstraints = {
       video: this._facingMode,
