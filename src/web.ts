@@ -207,59 +207,50 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     if (video)
       throw new Error("Camera already started")
 
-    return new Promise(async (resolve, reject) => {
-      const parent = document.createElement('div');
-      parent.setAttribute(
+    const parent = document.createElement('div');
+    parent.setAttribute(
+      'style',
+      'position:absolute; top: 0; left: 0; width:100%; height: 100%; background-color: black;'
+    );
+    this._video = document.createElement('video');
+    this._video.id = 'video';
+    // Don't flip video feed if camera is rear facing
+    if (this._options?.cameraDirection !== CameraDirection.BACK) {
+      this._video.setAttribute(
         'style',
-        'position:absolute; top: 0; left: 0; width:100%; height: 100%; background-color: black;'
+        '-webkit-transform: scaleX(-1); transform: scaleX(-1); width:100%; height: 100%;'
       );
-      this._video = document.createElement('video');
-      this._video.id = 'video';
-      // Don't flip video feed if camera is rear facing
-      if (this._options?.cameraDirection !== CameraDirection.BACK) {
-        this._video.setAttribute(
-          'style',
-          '-webkit-transform: scaleX(-1); transform: scaleX(-1); width:100%; height: 100%;'
-        );
-      } else {
-        this._video.setAttribute('style', 'width:100%; height: 100%;');
-      }
+    } else {
+      this._video.setAttribute('style', 'width:100%; height: 100%;');
+    }
 
-      const userAgent = navigator.userAgent.toLowerCase();
-      const isSafari = userAgent.includes('safari') && !userAgent.includes('chrome');
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isSafari = userAgent.includes('safari') && !userAgent.includes('chrome');
 
-      // Safari on iOS needs to have the autoplay, muted and playsinline attributes set for video.play() to be successful
-      // Without these attributes this.video.play() will throw a NotAllowedError
-      // https://developer.apple.com/documentation/webkit/delivering_video_content_for_safari
-      if (isSafari) {
-        this._video.setAttribute('autoplay', 'true');
-        this._video.setAttribute('muted', 'true');
-        this._video.setAttribute('playsinline', 'true');
-      }
+    // Safari on iOS needs to have the autoplay, muted and playsinline attributes set for video.play() to be successful
+    // Without these attributes this.video.play() will throw a NotAllowedError
+    // https://developer.apple.com/documentation/webkit/delivering_video_content_for_safari
+    if (isSafari) {
+      this._video.setAttribute('autoplay', 'true');
+      this._video.setAttribute('muted', 'true');
+      this._video.setAttribute('playsinline', 'true');
+    }
 
-      parent.appendChild(this._video);
-      body.appendChild(parent);
+    parent.appendChild(this._video);
+    body.appendChild(parent);
 
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const constraints: MediaStreamConstraints = {
-          video: this._facingMode,
-        };
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return
 
-        navigator.mediaDevices.getUserMedia(constraints).then(
-          (stream) => {
-            //video.src = window.URL.createObjectURL(stream);
-            if (this._video) {
-              this._video.srcObject = stream;
-              this._video.play();
-            }
-            resolve();
-          },
-          (err) => {
-            reject(err);
-          }
-        );
-      }
-    });
+    const constraints: MediaStreamConstraints = {
+      video: this._facingMode,
+    };
+
+    const newStream = await navigator.mediaDevices.getUserMedia(constraints)
+    //video.src = window.URL.createObjectURL(stream);
+    if (this._video) {
+      this._video.srcObject = newStream;
+      this._video.play();
+    }
   }
 
   private _stop(): void {
