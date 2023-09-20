@@ -58,7 +58,9 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     }
     const video = await this._getVideoElement();
     if (video) {
-      return await this._getFirstResultFromReader();
+      const scanResult = await this._getFirstResultFromReader();
+      if (scanResult) return scanResult
+      throw this.unavailable('Missing scan result');
     } else {
       throw this.unavailable('Missing video element');
     }
@@ -162,32 +164,32 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
 
   private async _getFirstResultFromReader() {
     const videoElement = await this._getVideoElement();
+    if (!videoElement) return
+
     return new Promise<IScanResultWithContent>(async (resolve, reject) => {
-      if (videoElement) {
-        let hints;
-        if (this._formats.length) {
-          hints = new Map();
-          hints.set(DecodeHintType.POSSIBLE_FORMATS, this._formats);
-        }
-        const reader = new BrowserQRCodeReader(hints);
-        this._controls = await reader.decodeFromVideoElement(videoElement, (result, error, controls) => {
-          if (!error && result && result.getText()) {
-            resolve({
-              hasContent: true,
-              content: result.getText(),
-              format: result.getBarcodeFormat().toString(),
-            });
-            controls.stop();
-            this._controls = null;
-            this._stop();
-          }
-          if (error && error.message) {
-            console.error(error.message);
-          }
-	  reject(error)
-        });
+      let hints;
+      if (this._formats.length) {
+        hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, this._formats);
       }
-    });
+      const reader = new BrowserQRCodeReader(hints);
+      this._controls = await reader.decodeFromVideoElement(videoElement, (result, error, controls) => {
+        if (!error && result && result.getText()) {
+          resolve({
+            hasContent: true,
+            content: result.getText(),
+            format: result.getBarcodeFormat().toString(),
+          });
+          controls.stop();
+          this._controls = null;
+          this._stop();
+        }
+        if (error && error.message) {
+          console.error(error.message);
+        }
+        reject(error)
+      });
+    })
   }
 
   private async _startVideo(): Promise<void> {
