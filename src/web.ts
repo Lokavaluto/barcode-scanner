@@ -268,7 +268,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     });
   }
 
-  private async _stop(): Promise<any> {
+  private _stop(): void {
     if (this._video) {
       this._video.pause();
 
