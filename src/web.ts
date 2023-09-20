@@ -162,7 +162,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
 
   private async _getFirstResultFromReader() {
     const videoElement = await this._getVideoElement();
-    return new Promise<IScanResultWithContent>(async (resolve) => {
+    return new Promise<IScanResultWithContent>(async (resolve, reject) => {
       if (videoElement) {
         let hints;
         if (this._formats.length) {
@@ -184,6 +184,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
           if (error && error.message) {
             console.error(error.message);
           }
+	  reject(error)
         });
       }
     });
