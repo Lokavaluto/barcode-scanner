@@ -193,6 +193,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
   }
 
   private async _startVideo(): Promise<void> {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('No mediaDevices supported');
     const stream = await navigator.mediaDevices
       .getUserMedia({
         audio: false,
@@ -239,7 +240,6 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     parent.appendChild(this._video);
     body.appendChild(parent);
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return
 
     const constraints: MediaStreamConstraints = {
       video: this._facingMode,
