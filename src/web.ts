@@ -21,6 +21,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
   private _controls: IScannerControls | null = null;
   private _torchState = false;
   private _video: HTMLVideoElement | null = null;
+  private _videoPromise: Promise<void> | null = null;
   private _options: ScanOptions | null = null;
   private _backgroundColor: string | null = null;
   private _facingMode: MediaTrackConstraints = BarcodeScannerWeb._BACK;
@@ -151,7 +152,10 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
 
   private async _getVideoElement() {
     if (!this._video) {
-      await this._startVideo();
+      if (!this._videoPromise) {
+        this._videoPromise = this._startVideo();
+      }
+      return await this._videoPromise
     }
     return this._video;
   }
@@ -273,6 +277,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
         track.stop();
       }
       this._video.parentElement?.remove();
+      this._videoPromise = null;
       this._video = null;
     }
   }
