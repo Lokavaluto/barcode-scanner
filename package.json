@@ -1,6 +1,6 @@
 {
-  "name": "@capacitor-community/barcode-scanner",
-  "version": "3.0.3",
+  "name": "@lokavaluto/barcode-scanner",
+  "version": "3.0.4",
   "description": "A fast and efficient (QR) barcode scanner for Capacitor",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
@@ -89,7 +89,7 @@
     "example": "examples"
   },
   "dependencies": {
-    "@zxing/browser": "^0.1.1",
+    "@zxing/browser": "0.1.1",
     "@zxing/library": "^0.19.2"
   }
 }
