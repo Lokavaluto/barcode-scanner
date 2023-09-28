@@ -1,6 +1,7 @@
 import { WebPlugin } from '@capacitor/core';
 import { BarcodeFormat, BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
 import { DecodeHintType } from '@zxing/library';
+import { NotFoundException, ChecksumException, FormatException } from '@zxing/library';
 
 import {
   BarcodeScannerPlugin,
@@ -14,6 +15,13 @@ import {
   IScanResultWithContent,
 } from './definitions';
 
+export class ScanCanceled extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ScanCanceled';
+  }
+}
+
 export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin {
   private static _FORWARD = { facingMode: 'user' };
   private static _BACK = { facingMode: 'environment' };
@@ -22,6 +30,7 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
   private _torchState = false;
   private _video: HTMLVideoElement | null = null;
   private _videoPromise: Promise<void> | null = null;
+  private _video_nonce: number = 0;
   private _options: ScanOptions | null = null;
   private _backgroundColor: string | null = null;
   private _facingMode: MediaTrackConstraints = BarcodeScannerWeb._BACK;
@@ -57,13 +66,9 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
       this._facingMode = _options.cameraDirection === CameraDirection.BACK ? BarcodeScannerWeb._BACK : BarcodeScannerWeb._FORWARD;
     }
     const video = await this._getVideoElement();
-    if (video) {
-      const scanResult = await this._getFirstResultFromReader();
-      if (scanResult) return scanResult
-      throw this.unavailable('Missing scan result');
-    } else {
-      throw this.unavailable('Missing video element');
-    }
+    const scanResult = await this._getFirstResultFromReader(video);
+    if (!scanResult) throw this.unavailable('Missing scan result');
+    return scanResult;
   }
 
   async startScanning(_options: ScanOptions, _callback: any): Promise<string> {
@@ -78,7 +83,9 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
   }
 
   async resumeScanning(): Promise<void> {
-    this._getFirstResultFromReader();
+    const video = await this._getVideoElement();
+    await this._getFirstResultFromReader(video);
+    return;
   }
 
   async stopScan(_options?: StopScanOptions): Promise<void> {
@@ -152,73 +159,104 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     return { isEnabled: this._torchState };
   }
 
-  private async _getVideoElement() {
+  private async _getVideoElement(): Promise<HTMLVideoElement> {
     if (!this._video) {
       if (!this._videoPromise) {
-        this._videoPromise = this._startVideo();
+        this._videoPromise = (async () => {
+          const video = await this._startVideo();
+          const parent = document.createElement('div');
+          parent.setAttribute(
+            'style',
+            'position:absolute; top: 0; left: 0; width:100%; height: 100%; background-color: black;'
+          );
+          parent.appendChild(video);
+          document.body.appendChild(parent);
+          this._video = video;
+          this._videoPromise = null;
+        })();
       }
-      return await this._videoPromise
+      await this._videoPromise;
+      if (this._video === null) {
+        throw new Error('Unexpected null value for _video');
+      }
     }
     return this._video;
   }
 
-  private async _getFirstResultFromReader() {
-    const videoElement = await this._getVideoElement();
-    if (!videoElement) return
+  private async _getFirstResultFromReader(video: HTMLVideoElement) {
     let hints;
     if (this._formats.length) {
       hints = new Map();
       hints.set(DecodeHintType.POSSIBLE_FORMATS, this._formats);
     }
     const reader = new BrowserQRCodeReader(hints);
+    let result;
+    try {
+      result = await new Promise<IScanResultWithContent>(async (resolve, reject) => {
+        this._controls = await reader.decodeFromVideoElement(video, (result, error) => {
+          if (error) {
+            if (
+              error instanceof NotFoundException ||
+              error instanceof ChecksumException ||
+              error instanceof FormatException
+            ) {
+              console.warn(`Ignoring exception ${error.name} while reading QRCode`);
+              return;
+            }
 
-    return new Promise<IScanResultWithContent>(async (resolve, reject) => {
-      this._controls = await reader.decodeFromVideoElement(videoElement, (result, error, controls) => {
-        if (!error && result && result.getText()) {
+            reject(error);
+            return;
+          }
+          // No errors...
+          if (!result) {
+            reject(new Error('Unexpectedly called with no error nor result'));
+            return;
+          }
+          let resultText = result.getText();
+          if (!resultText) {
+            reject(new Error('Unexpectedly called with no error nor text result'));
+            return;
+          }
           resolve({
             hasContent: true,
-            content: result.getText(),
+            content: resultText,
             format: result.getBarcodeFormat().toString(),
           });
-          controls.stop();
-          this._controls = null;
-          this._stop();
-        }
-        if (error && error.message) {
-          console.error(error.message);
-        }
-        reject(error)
+        });
       });
-    })
+    } finally {
+      if (this._controls) {
+        this._controls.stop();
+        this._controls = null;
+        this._stop();
+      }
+    }
+    return result;
   }
 
-  private async _startVideo(): Promise<void> {
+  private async _startVideo(): Promise<HTMLVideoElement> {
+    let video_nonce = this._video_nonce;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('No mediaDevices supported');
-    const stream = await navigator.mediaDevices
-      .getUserMedia({
-        audio: false,
-        video: true,
-      })
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: true,
+    });
     // Stop any existing stream so we can request media with different constraints based on user input
-    stream.getTracks().forEach((track) => track.stop());
+    stopStream(stream);
+    if (video_nonce != this._video_nonce) {
+      // stop was called
+      throw new ScanCanceled('Canceled after stopping hypothetic previous scan');
+    }
 
     if (document.getElementById('video')) throw new Error('Camera already started');
 
-    const parent = document.createElement('div');
-    parent.setAttribute(
-      'style',
-      'position:absolute; top: 0; left: 0; width:100%; height: 100%; background-color: black;'
-    );
-    this._video = document.createElement('video');
-    this._video.id = 'video';
+    let video = document.createElement('video');
+    video.id = 'video';
     // Don't flip video feed if camera is rear facing
     if (this._options?.cameraDirection !== CameraDirection.BACK) {
-      this._video.setAttribute(
-        'style',
-        '-webkit-transform: scaleX(-1); transform: scaleX(-1); width:100%; height: 100%;'
-      );
+      video.setAttribute('style', '-webkit-transform: scaleX(-1); transform: scaleX(-1); width:100%; height: 100%;');
     } else {
-      this._video.setAttribute('style', 'width:100%; height: 100%;');
+      video.setAttribute('style', 'width:100%; height: 100%;');
     }
 
     const userAgent = navigator.userAgent.toLowerCase();
@@ -228,40 +266,48 @@ export class BarcodeScannerWeb extends WebPlugin implements BarcodeScannerPlugin
     // Without these attributes this.video.play() will throw a NotAllowedError
     // https://developer.apple.com/documentation/webkit/delivering_video_content_for_safari
     if (isSafari) {
-      this._video.setAttribute('autoplay', 'true');
-      this._video.setAttribute('muted', 'true');
-      this._video.setAttribute('playsinline', 'true');
+      video.setAttribute('autoplay', 'true');
+      video.setAttribute('muted', 'true');
+      video.setAttribute('playsinline', 'true');
     }
-
-    parent.appendChild(this._video);
-    document.body.appendChild(parent);
 
     const constraints: MediaStreamConstraints = {
       video: this._facingMode,
     };
 
-    const newStream = await navigator.mediaDevices.getUserMedia(constraints)
-    //video.src = window.URL.createObjectURL(stream);
-    if (this._video) {
-      this._video.srcObject = newStream;
-      this._video.play();
+    const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (video_nonce != this._video_nonce) {
+      // stop was called
+      stopStream(newStream);
+      throw new ScanCanceled('Canceled after creating new stream');
     }
+    //video.src = window.URL.createObjectURL(stream);
+    video.srcObject = newStream;
+    await video.play();
+    if (video_nonce != this._video_nonce) {
+      // stop was called
+      stopStream(newStream);
+      throw new ScanCanceled('Canceled while play stream instruction');
+    }
+    return video;
   }
 
   private _stop(): void {
     if (this._video) {
-      this._video.pause();
-
-      const st: any = this._video.srcObject;
-      const tracks = st.getTracks();
-
-      for (var i = 0; i < tracks.length; i++) {
-        var track = tracks[i];
-        track.stop();
-      }
-      this._video.parentElement?.remove();
+      stopVideo(this._video);
       this._videoPromise = null;
       this._video = null;
     }
+    this._video_nonce++;
   }
+}
+
+function stopStream(stream: any) {
+  stream.getTracks().forEach((track: any) => track.stop());
+}
+
+function stopVideo(video: HTMLVideoElement) {
+  video.pause();
+  if (video.srcObject) stopStream(video.srcObject);
+  video.parentElement?.remove();
 }
