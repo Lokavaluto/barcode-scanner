@@ -1,6 +1,6 @@
 {
   "name": "@lokavaluto/barcode-scanner",
-  "version": "3.0.4",
+  "version": "3.0.7",
   "description": "A fast and efficient (QR) barcode scanner for Capacitor",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
@@ -11,7 +11,7 @@
     "android/build.gradle",
     "dist/",
     "ios/Plugin/",
-    "CapacitorCommunityBarcodeScanner.podspec"
+    "LokavalutoBarcodeScanner.podspec"
   ],
   "author": "tafelnl",
   "license": "MIT",
